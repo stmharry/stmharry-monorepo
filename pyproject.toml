@@ -1,0 +1,23 @@
+[tool.poetry]
+name = "stmharry"
+version = "0.1.0"
+description = ""
+authors = ["Harry H <h@stmharry.io>"]
+readme = "README.md"
+packages = [
+    { include = "stmharry" },
+]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+absl-py = "^1.4.0"
+pydantic = "^1.10.13"
+pyyaml = "^6.0.1"
+
+[tool.poetry.group.dev.dependencies]
+mypy = "^1.6.1"
+types-pyyaml = "^6.0.12.12"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
