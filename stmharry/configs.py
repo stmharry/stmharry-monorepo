@@ -80,7 +80,7 @@ class ObjectConfig(Generic[T_GENERIC], BaseModel):
 
             if isinstance(field_value, dict) and ("__class__" in field_value):
                 logging.info(
-                    f"Detected object '{field_name}' of type `{field_value['__class__']}`."
+                    f"Detected object '{field_name}' of type '{field_value['__class__']}'."
                 )
                 field_value = parse_obj_as(
                     types.new_class(field_name, (ObjectConfig[object],)), field_value
@@ -104,7 +104,7 @@ class ObjectConfig(Generic[T_GENERIC], BaseModel):
         type_T: Type[T_GENERIC] = get_args(self.__class__.__orig_bases__[0])[0]
         if not isinstance(obj, type_T):
             logging.fatal(
-                f"Object {obj} is not a sub-class of config-specificed class `{type_T}`!"
+                f"Object {obj} is not a sub-class of config-specificed class '{type_T}'!"
             )
 
         return obj
