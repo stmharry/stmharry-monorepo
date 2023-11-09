@@ -5,12 +5,16 @@ from absl import logging as absl_logging
 from rich.logging import RichHandler
 
 
-def patch_logging() -> None:
+def _patch_logging() -> None:
     logging.root.removeHandler(absl_logging._absl_handler)
     absl_logging._warn_preinit_stderr = False
 
 
-logging.basicConfig(
-    level=logging.NOTSET, format="%(message)s", datefmt="[%X]", handlers=[RichHandler()]
-)
-app.call_after_init(patch_logging)
+def patch_logging() -> None:
+    logging.basicConfig(
+        level=logging.NOTSET,
+        format="%(message)s",
+        datefmt="[%X]",
+        handlers=[RichHandler()],
+    )
+    app.call_after_init(_patch_logging)
