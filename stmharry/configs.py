@@ -110,8 +110,12 @@ class ObjectConfig(Generic[T_GENERIC], BaseModel):
         return obj
 
     # this has to be arranged to the last position to avoid overriding `dict`
-    def dict(self, *args, **kwargs) -> dict:
-        exclude: set | None = kwargs.pop("exclude", None)
+    def dict(  # type: ignore
+        self,
+        exclude: set | None = None,
+        *args: Any,
+        **kwargs: Any,
+    ) -> dict:
         if exclude is None:
             exclude = set()
 
@@ -133,3 +137,6 @@ class BaseConfig(BaseModel):
             obj: dict = yaml.unsafe_load(f)
 
         return cls.parse_obj(obj=obj)
+
+    def to_yaml(self) -> str:
+        return yaml.dump(self.dict(by_alias=True))
