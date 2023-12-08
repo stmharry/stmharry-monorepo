@@ -37,6 +37,38 @@ def is_indirect_generic_subclass(
     return bases is not None and isinstance(bases, tuple)
 
 
+def _import_module_native(module_name: str) -> ModuleType | None:
+    try:
+        return importlib.import_module(module_name)
+
+    except ModuleNotFoundError:
+        return None
+
+
+def import_module(module_name: str) -> ModuleType:
+    module: ModuleType | None = None
+
+    # native import
+    module = _import_module_native(module_name)
+    if module is not None:
+        return module
+
+    # indirect import
+    name_parts: list[str] = module_name.split(".")
+    if len(name_parts) == 0:
+        raise ValueError(f"Invalid module name {module_name}!")
+
+    # this is to facilitate backwards-compatible importing patterns
+    module = _import_module_native(name_parts[0])
+    for name_part in name_parts[1:]:
+        module = getattr(module, name_part, None)
+
+    if module is not None:
+        return module
+
+    raise ModuleNotFoundError(f"Module {module_name} not found!")
+
+
 class ClassConfig(object):
     @classmethod
     def __get_validators__(cls) -> Generator[Callable, None, None]:
@@ -54,11 +86,11 @@ class ClassConfig(object):
         if module_name == "":
             module_name = "__main__"
 
-        module: ModuleType = importlib.import_module(module_name)
+        module: ModuleType = import_module(module_name)
         obj_cls = getattr(module, obj_name, None)
 
         if obj_cls is None:
-            raise ValueError(f"Referenced class {obj_cls} not found!")
+            raise ValueError(f"Referenced class {module_name} not found!")
 
         return obj_cls
 
