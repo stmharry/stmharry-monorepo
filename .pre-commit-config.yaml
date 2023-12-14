@@ -31,7 +31,7 @@ repos:
       - id: black
 
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.6.0
+    rev: v1.7.1
     hooks:
       - id: mypy
         language: system
@@ -41,8 +41,21 @@ repos:
         args:
           - --ignore-missing-imports
 
+  - repo: local
+    hooks:
+      - id: pytest
+        name: pytest
+        entry: pytest
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages:
+          - commit
+        types:
+          - python
+
   - repo: https://github.com/commitizen-tools/commitizen
-    rev: 3.10.1
+    rev: v3.13.0
     hooks:
       - id: commitizen
         stages:

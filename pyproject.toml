@@ -20,6 +20,14 @@ mypy = "^1.6.1"
 types-pyyaml = "^6.0.12.12"
 pytest = "^7.4.3"
 
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.pyright]
+include = ["app"]
+exclude = ["**/__pycache__"]
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
