@@ -18,6 +18,7 @@ rich = "^13.6.0"
 [tool.poetry.group.dev.dependencies]
 mypy = "^1.6.1"
 types-pyyaml = "^6.0.12.12"
+pytest = "^7.4.3"
 
 [build-system]
 requires = ["poetry-core"]
