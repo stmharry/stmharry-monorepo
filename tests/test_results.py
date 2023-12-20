@@ -1,6 +1,6 @@
 import pytest
 
-from stmharry.rust.results import Err, Ok, Result, returns_result
+from stmharry.rust.result import Err, Ok, Result, returns_result
 
 
 def _division(x: float, y: float) -> float:

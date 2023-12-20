@@ -1,1 +1,1 @@
-from stmharry.rust.results import Err, Ok, Result, returns_result  # noqa
+from stmharry.rust.result import Err, Ok, Result, returns_result  # noqa
