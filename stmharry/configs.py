@@ -16,7 +16,7 @@ from typing import (
 
 import yaml
 from absl import logging
-from pydantic import BaseModel, Extra, Field, parse_obj_as
+from pydantic import BaseModel, Field, TypeAdapter
 
 T_GENERIC = TypeVar("T_GENERIC")
 T_CONFIG = TypeVar("T_CONFIG", bound="BaseConfig")
@@ -114,9 +114,9 @@ class ObjectConfig(Generic[T_GENERIC], BaseModel):
                 logging.info(
                     f"Detected object '{field_name}' of type '{field_value['__class__']}'."
                 )
-                field_value = parse_obj_as(
-                    types.new_class(field_name, (ObjectConfig[object],)), field_value
-                )
+                field_value = TypeAdapter(
+                    types.new_class(field_name, (ObjectConfig[object],))
+                ).validate_python(field_value)
 
             # use `ObjectConfig.create` if field is of type `ObjectConfig`
             if isinstance(field_value, ObjectConfig):
@@ -153,10 +153,10 @@ class ObjectConfig(Generic[T_GENERIC], BaseModel):
 
         exclude = exclude | {"obj_cls"}
 
-        return super().dict(*args, exclude=exclude, **kwargs)
+        return super().model_dump(*args, exclude=exclude, **kwargs)
 
     class Config:
-        extra = Extra.allow
+        extra = "allow"
         arbitrary_types_allowed = True
 
 
@@ -168,7 +168,7 @@ class BaseConfig(BaseModel):
         with open(path, "r") as f:
             obj: dict = yaml.unsafe_load(f)
 
-        return cls.parse_obj(obj=obj)
+        return TypeAdapter(cls).validate_python(obj)
 
     def to_yaml(self) -> str:
-        return yaml.dump(self.dict(by_alias=True))
+        return yaml.dump(self.model_dump(by_alias=True))
