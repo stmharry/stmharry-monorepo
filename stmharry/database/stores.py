@@ -241,9 +241,9 @@ class BaseStore(Generic[T_ROW]):
 
         return _rows
 
-    async def add(self, row: T_ROW) -> T_ROW | None:
+    async def add(self, row: T_ROW) -> T_ROW:
         _rows: Iterable[aiosqlite.Row] = await self._add([row])
-        return self._return_one_or_none(_rows, row_cls=self._row_cls)
+        return self._return_one(_rows, row_cls=self._row_cls).unwrap()
 
     async def add_many(self, rows: list[T_ROW]) -> list[T_ROW]:
         _rows: Iterable[aiosqlite.Row] = await self._add(rows)
