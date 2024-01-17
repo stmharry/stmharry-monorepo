@@ -160,18 +160,21 @@ class BaseStore(Generic[T_ROW]):
         table = table or Table(self.TABLE_NAME)
         columns = columns or self.columns
 
+        column_names: list[str] = [column.name for column in columns]
+
         query: QueryBuilder = self._query_builder().into(table).columns(*columns)
         parameters: ParametersType = {}
         for num, row in enumerate(rows):
-            row_dict: dict[str, Any] = json.loads(row.model_dump_json())
+            row_dict: dict[str, Any] = json.loads(
+                row.model_dump_json(include=set(column_names))
+            )
 
             values: list[Any] = []
-            column: Field
-            for column in columns:
-                key: str = f"{column.name}_{num}"
+            for column_name in column_names:
+                key: str = f"{column_name}_{num}"
 
                 values.append(Parameter(f":{key}"))
-                parameters[key] = row_dict[column.name]
+                parameters[key] = row_dict[column_name]
 
             query = query.insert(*values)
 
