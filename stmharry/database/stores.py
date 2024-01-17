@@ -7,6 +7,7 @@ from typing import Any, ClassVar, Generic, Literal, TypeVar, get_args
 
 import aiosqlite
 from absl import logging
+from pydantic import ValidationError
 from pypika import AliasedQuery, Field, Parameter, Table
 from pypika.queries import QueryBuilder, Selectable
 from pypika.terms import Term
@@ -19,7 +20,7 @@ from stmharry.database.core import (
 )
 from stmharry.database.pypika_dialects import SQLQueryBuilder
 from stmharry.database.schemas import BaseRow
-from stmharry.rust import Err, Ok, Result
+from stmharry.rust.result import Err, Ok, Result, returns_result
 
 T = TypeVar("T", bound="BaseStore")
 T_ROW = TypeVar("T_ROW", bound=BaseRow)
@@ -60,11 +61,18 @@ class BaseStore(Generic[T_ROW]):
         return self
 
     @classmethod
+    @returns_result(err=ValidationError)
+    def _validate_row(
+        cls, row: aiosqlite.Row, row_cls: type[T_ROW_RETURN]
+    ) -> T_ROW_RETURN:
+        return row_cls.model_validate(dict(row))
+
+    @classmethod
     def _return_one(
         cls, rows: Iterable[aiosqlite.Row], row_cls: type[T_ROW_RETURN]
     ) -> Result[T_ROW_RETURN, ValueError]:
         for row in rows:
-            result: Result = row_cls.model_validate_row(row)
+            result: Result = cls._validate_row(row, row_cls=row_cls)
 
             match result:
                 case Ok(_row):
@@ -81,7 +89,7 @@ class BaseStore(Generic[T_ROW]):
         cls, rows: Iterable[aiosqlite.Row], row_cls: type[T_ROW_RETURN]
     ) -> T_ROW_RETURN | None:
         for row in rows:
-            result: Result = row_cls.model_validate_row(row)
+            result: Result = cls._validate_row(row, row_cls=row_cls)
 
             match result:
                 case Ok(_row):
@@ -99,7 +107,7 @@ class BaseStore(Generic[T_ROW]):
     ) -> list[T_ROW_RETURN]:
         _rows: list[T_ROW_RETURN] = []
         for row in rows:
-            result: Result = row_cls.model_validate_row(row)
+            result: Result = cls._validate_row(row, row_cls=row_cls)
 
             match result:
                 case Ok(_row):
