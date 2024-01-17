@@ -14,9 +14,8 @@ class BaseRow(BaseModel):
     @classmethod
     @returns_result(err=ValidationError)
     def model_validate_row(cls: Type[T], row: aiosqlite.Row) -> T:
-        obj: dict[str, Any] = {
-            field_name: row[i] for i, field_name in enumerate(cls.model_fields.keys())
-        }
+        keys: set[str] = set(row.keys()) & set(cls.model_fields.keys())
+        obj: dict[str, Any] = {field_name: row[field_name] for field_name in keys}
 
         return cls.model_validate(obj)
 
