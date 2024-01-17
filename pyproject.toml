@@ -10,8 +10,11 @@ packages = [
 
 [tool.poetry.dependencies]
 python = "^3.11"
+
 absl-py = "^2.0.0"
+aiosqlite = "^0.19.0"
 pydantic = "^2.5.3"
+pypika = {git = "https://github.com/kayak/pypika.git", rev = "8841520"}
 pyyaml = "^6.0.1"
 rich = "^13.6.0"
 
