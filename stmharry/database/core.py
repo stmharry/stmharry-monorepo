@@ -44,14 +44,16 @@ class DBWrapper(object):
         journal_mode: str = "WAL",
         enforce_foreign_keys: bool = True,
         row_factory: type[aiosqlite.Row] = aiosqlite.Row,
+        initialize: bool = True,
     ) -> T:
         connection = await aiosqlite.connect(database=database)
         connection.row_factory = row_factory
 
-        await connection.execute(f"PRAGMA journal_mode={journal_mode};")
-        await connection.execute(
-            f"PRAGMA foreign_keys={'ON' if enforce_foreign_keys else 'OFF'}"
-        )
+        if initialize:
+            await connection.execute(f"PRAGMA journal_mode={journal_mode};")
+            await connection.execute(
+                f"PRAGMA foreign_keys={'ON' if enforce_foreign_keys else 'OFF'}"
+            )
 
         return cls(connection=connection)
 

@@ -41,8 +41,13 @@ class BaseStore(Generic[T_ROW]):
         self._row_cls = get_args(self.__class__.__orig_bases__[0])[0]  # type: ignore
 
     @classmethod
-    async def create(cls: type[T], db: DBWrapper, *args: Any, **kwargs: Any) -> T:
+    async def create(
+        cls: type[T], db: DBWrapper, initialize: bool = True, *args: Any, **kwargs: Any
+    ) -> T:
         self: T = cls(db=db, *args, **kwargs)
+
+        if not initialize:
+            return self
 
         async with db.writer() as connection:
             qp: CreateQueryWithParameters
