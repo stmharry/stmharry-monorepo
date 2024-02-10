@@ -84,4 +84,7 @@ class DBWrapper(object):
             await self.connection.commit()
 
     async def close(self) -> None:
+        if self.connection._connection is None:
+            return
+
         await self.connection.close()
