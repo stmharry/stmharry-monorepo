@@ -2,21 +2,11 @@ import importlib
 import types
 from pathlib import Path
 from types import ModuleType
-from typing import (
-    Any,
-    Callable,
-    Generator,
-    Generic,
-    Protocol,
-    Type,
-    TypeGuard,
-    TypeVar,
-    get_args,
-)
+from typing import Annotated, Any, Generic, Protocol, Type, TypeGuard, TypeVar, get_args
 
 import yaml
 from absl import logging
-from pydantic import BaseModel, Field, TypeAdapter
+from pydantic import AfterValidator, BaseModel, Field, TypeAdapter
 
 T_GENERIC = TypeVar("T_GENERIC")
 T_CONFIG = TypeVar("T_CONFIG", bound="BaseConfig")
@@ -69,34 +59,30 @@ def import_module(module_name: str) -> ModuleType:
     raise ModuleNotFoundError(f"Module {module_name} not found!")
 
 
-class ClassConfig(object):
-    @classmethod
-    def __get_validators__(cls) -> Generator[Callable, None, None]:
-        yield cls.validate
+def validate_obj_cls(v: Any) -> Type:
+    if not isinstance(v, str):
+        raise ValueError(f"Expected string, got {v}!")
 
-    @classmethod
-    def validate(cls, v: Any) -> Type:
-        if not isinstance(v, str):
-            raise ValueError(f"Expected string, got {v}!")
+    module_name: str
+    obj_name: str
+    (module_name, _, obj_name) = v.rpartition(".")
 
-        module_name: str
-        obj_name: str
-        (module_name, _, obj_name) = v.rpartition(".")
+    if module_name == "":
+        module_name = "__main__"
 
-        if module_name == "":
-            module_name = "__main__"
+    module: ModuleType = import_module(module_name)
+    obj_cls = getattr(module, obj_name, None)
 
-        module: ModuleType = import_module(module_name)
-        obj_cls = getattr(module, obj_name, None)
+    if obj_cls is None:
+        raise ValueError(f"Referenced class {module_name} not found!")
 
-        if obj_cls is None:
-            raise ValueError(f"Referenced class {module_name} not found!")
-
-        return obj_cls
+    return obj_cls
 
 
 class ObjectConfig(Generic[T_GENERIC], BaseModel):
-    obj_cls: ClassConfig = Field(alias="__class__", repr=False)
+    obj_cls: Annotated[
+        str, Field(alias="__class__", repr=False), AfterValidator(validate_obj_cls)
+    ]
 
     def instantiate(self, **kwargs: Any) -> T_GENERIC:
         obj_dict: dict = self.dict()
@@ -133,7 +119,7 @@ class ObjectConfig(Generic[T_GENERIC], BaseModel):
         else:
             obj = self.obj_cls(**obj_dict)
 
-        type_T: Type[T_GENERIC] = get_args(self.__class__.__orig_bases__[0])[0]
+        type_T: Type[T_GENERIC] = get_args(self.__class__.__orig_bases__[0])[0]  # type: ignore
         if not isinstance(obj, type_T):
             logging.fatal(
                 f"Object {obj} is not a sub-class of config-specificed class '{type_T}'!"
