@@ -67,42 +67,40 @@ def import_module(module_name: str) -> ModuleType:
     raise ModuleNotFoundError(f"Module {module_name} not found!")
 
 
+def validate_obj_cls(v: Any) -> Type:
+    match v:
+        case type():
+            return v
+
+        case str():
+            module_name: str
+            obj_name: str
+            (module_name, _, obj_name) = v.rpartition(".")
+
+            if module_name == "":
+                module_name = "__main__"
+
+            module: ModuleType = import_module(module_name)
+            obj_cls = getattr(module, obj_name, None)
+
+            if obj_cls is None:
+                raise ValueError(f"Referenced module name '{module_name}' not found!")
+
+            return obj_cls
+
+        case _:
+            raise ValueError(f"Invalid object class reference '{v}'!")
+
+
+def serialize_obj_cls(v: Type) -> str:
+    return f"{v.__module__}.{v.__name__}"
+
+
 class ObjectConfig(Generic[T_GENERIC], BaseModel):
     model_config = ConfigDict(
         extra="allow",
         arbitrary_types_allowed=True,
     )
-
-    @classmethod
-    def validate_obj_cls(cls, v: Any) -> Type:
-        match v:
-            case type():
-                return v
-
-            case str():
-                module_name: str
-                obj_name: str
-                (module_name, _, obj_name) = v.rpartition(".")
-
-                if module_name == "":
-                    module_name = "__main__"
-
-                module: ModuleType = import_module(module_name)
-                obj_cls = getattr(module, obj_name, None)
-
-                if obj_cls is None:
-                    raise ValueError(
-                        f"Referenced module name '{module_name}' not found!"
-                    )
-
-                return obj_cls
-
-            case _:
-                raise ValueError(f"Invalid object class reference '{v}'!")
-
-    @classmethod
-    def serialize_obj_cls(cls, v: Type) -> str:
-        return f"{v.__module__}.{v.__name__}"
 
     obj_cls: Annotated[
         Type,
