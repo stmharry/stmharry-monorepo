@@ -1,4 +1,5 @@
 import importlib
+import itertools
 from collections.abc import Callable
 from pathlib import Path
 from types import ModuleType
@@ -10,10 +11,11 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
-    PlainSerializer,
-    PlainValidator,
     TypeAdapter,
     ValidationError,
+    field_serializer,
+    field_validator,
+    model_validator,
 )
 
 T_GENERIC = TypeVar("T_GENERIC")
@@ -67,35 +69,6 @@ def import_module(module_name: str) -> ModuleType:
     raise ModuleNotFoundError(f"Module {module_name} not found!")
 
 
-def validate_obj_cls(v: Any) -> Type:
-    match v:
-        case type():
-            return v
-
-        case str():
-            module_name: str
-            obj_name: str
-            (module_name, _, obj_name) = v.rpartition(".")
-
-            if module_name == "":
-                module_name = "__main__"
-
-            module: ModuleType = import_module(module_name)
-            obj_cls = getattr(module, obj_name, None)
-
-            if obj_cls is None:
-                raise ValueError(f"Referenced module name '{module_name}' not found!")
-
-            return obj_cls
-
-        case _:
-            raise ValueError(f"Invalid object class reference '{v}'!")
-
-
-def serialize_obj_cls(v: Type) -> str:
-    return f"{v.__module__}.{v.__name__}"
-
-
 class ObjectConfig(Generic[T_GENERIC], BaseModel):
     model_config = ConfigDict(
         extra="allow",
@@ -104,10 +77,58 @@ class ObjectConfig(Generic[T_GENERIC], BaseModel):
 
     obj_cls: Annotated[
         Type,
+        # a default value of None would trigger the validation to use the generic type
         Field(alias="__class__"),
-        PlainValidator(validate_obj_cls),
-        PlainSerializer(serialize_obj_cls),
     ]
+
+    @classmethod
+    def get_generic_type(cls) -> Type:
+        assert is_indirect_generic_subclass(cls)
+
+        return get_args(cls.__orig_bases__[0])[0]
+
+    @model_validator(mode="before")
+    def validate_obj_cls_default(cls, values: Any) -> dict:
+        match values:
+            case dict():
+                if "__class__" not in values:
+                    values["__class__"] = cls.get_generic_type()
+
+        return values
+
+    @field_validator("obj_cls", mode="before")
+    @classmethod
+    def validate_obj_cls(cls, v: Any) -> Type:
+        match v:
+            case type():
+                return v
+
+            case str():
+                module_name: str
+                obj_name: str
+                (module_name, _, obj_name) = v.rpartition(".")
+
+                if module_name == "":
+                    module_name = "__main__"
+
+                module: ModuleType = import_module(module_name)
+                obj_cls = getattr(module, obj_name, None)
+
+                if obj_cls is None:
+                    raise ValueError(
+                        f"Referenced module name '{module_name}' not found!"
+                    )
+
+                return obj_cls
+
+            case _:
+                raise ValueError(f"Invalid object class reference '{v}'!")
+
+    @field_serializer("obj_cls")
+    def serialize_obj_cls(self, obj_cls: Type, _info) -> str:
+        if obj_cls is None:
+            breakpoint()
+        return f"{obj_cls.__module__}.{obj_cls.__name__}"
 
     @classmethod
     def recursive_model_validate(
@@ -159,7 +180,11 @@ class ObjectConfig(Generic[T_GENERIC], BaseModel):
 
         config_dict: dict = {
             key: getattr(config, key)
-            for key in config.model_dump(exclude={"obj_cls"}).keys()
+            for key in itertools.chain(
+                config.model_fields,
+                config.model_extra.keys() if config.model_extra else [],
+            )
+            if key not in {"obj_cls"}
         }
         logging.info(
             f"Creating object of class '{config.obj_cls.__name__}' using config dict {config_dict}."
@@ -175,7 +200,8 @@ class ObjectConfig(Generic[T_GENERIC], BaseModel):
             obj_instance = config.obj_cls(**config_dict)
 
         if config.__class__ is not ObjectConfig:
-            type_T: Type[T_GENERIC] = get_args(config.__class__.__orig_bases__[0])[0]  # type: ignore
+            type_T: Type[T_GENERIC] = config.__class__.get_generic_type()  # type: ignore
+
             if not isinstance(obj_instance, type_T):
                 logging.fatal(
                     f"Object {obj_instance} is not a sub-class of config-specificed class '{type_T}'!"
