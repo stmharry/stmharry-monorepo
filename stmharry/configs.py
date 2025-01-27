@@ -186,7 +186,7 @@ class ObjectConfig(Generic[T_GENERIC], BaseModel):
             )
             if key not in {"obj_cls"}
         }
-        logging.info(
+        logging.debug(
             f"Creating object of class '{config.obj_cls.__name__}' using config dict {config_dict}."
         )
 
