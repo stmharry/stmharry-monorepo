@@ -126,8 +126,6 @@ class ObjectConfig(Generic[T_GENERIC], BaseModel):
 
     @field_serializer("obj_cls")
     def serialize_obj_cls(self, obj_cls: Type, _info) -> str:
-        if obj_cls is None:
-            breakpoint()
         return f"{obj_cls.__module__}.{obj_cls.__name__}"
 
     @classmethod
