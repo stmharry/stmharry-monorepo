@@ -1,5 +1,6 @@
 import importlib
 import itertools
+import warnings
 from collections.abc import Callable
 from pathlib import Path
 from types import ModuleType
@@ -17,6 +18,9 @@ from pydantic import (
     field_validator,
     model_validator,
 )
+from pydantic.warnings import GenericBeforeBaseModelWarning
+
+warnings.filterwarnings("ignore", category=GenericBeforeBaseModelWarning)
 
 T_GENERIC = TypeVar("T_GENERIC")
 T_CONFIG = TypeVar("T_CONFIG", bound="BaseConfig")
