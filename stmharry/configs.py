@@ -123,6 +123,14 @@ class ObjectConfig(Generic[T_GENERIC], BaseModel):
                         f"Referenced module name '{module_name}' not found!"
                     )
 
+                generic_type: Type = cls.get_generic_type()
+                if (generic_type is not T_GENERIC) and not issubclass(  # type: ignore
+                    obj_cls, generic_type
+                ):
+                    raise ValueError(
+                        f"Object class '{obj_cls}' is not a sub-class of '{generic_type}'!"
+                    )
+
                 return obj_cls
 
             case _:
