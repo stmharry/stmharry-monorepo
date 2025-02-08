@@ -1,7 +1,5 @@
 import importlib
-import itertools
 import warnings
-from collections.abc import Callable
 from pathlib import Path
 from types import ModuleType
 from typing import Annotated, Any, Generic, Protocol, Type, TypeGuard, TypeVar, get_args
@@ -73,6 +71,47 @@ def import_module(module_name: str) -> ModuleType:
     raise ModuleNotFoundError(f"Module {module_name} not found!")
 
 
+def instantiate_obj(obj: Any) -> Any:
+    match obj:
+        case ObjectConfig():
+            obj_dict: dict[str, Any] = {
+                key: instantiate_obj(getattr(obj, key))
+                # model_fields + model_extra.keys()
+                for key in obj.model_dump().keys()
+            }
+            logging.debug(
+                f"Creating object of class '{obj.__class__.__name__}' using dict {obj_dict}."
+            )
+
+            # `obj_cls` has been checked in `validate_obj_cls()` as a sub-class
+            obj_cls: Type = obj_dict.pop("obj_cls")
+
+            if hasattr(obj_cls, "create"):
+                obj_inst = obj_cls.create(**obj_dict)
+            else:
+                obj_inst = obj_cls(**obj_dict)
+
+            return obj_inst
+
+        case dict():
+            obj = {key: instantiate_obj(value) for key, value in obj.items()}
+
+            try:
+                obj = ObjectConfig.model_validate(obj)
+
+            except ValidationError:
+                ...
+
+            else:
+                # we are a deeply hidden `ObjectConfig`!
+                obj = instantiate_obj(obj)
+
+        case list() | tuple() | set():
+            obj = type(obj)(instantiate_obj(value) for value in obj)
+
+    return obj
+
+
 class ObjectConfig(Generic[T_GENERIC], BaseModel):
     model_config = ConfigDict(
         extra="allow",
@@ -92,20 +131,23 @@ class ObjectConfig(Generic[T_GENERIC], BaseModel):
         return get_args(cls.__orig_bases__[0])[0]
 
     @model_validator(mode="before")
-    def validate_obj_cls_default(cls, values: Any) -> dict:
+    @classmethod
+    def set_obj_cls_default(cls, values: Any) -> dict:
         match values:
             case dict():
                 if "__class__" not in values:
-                    values["__class__"] = cls.get_generic_type()
+                    return {"__class__": cls.get_generic_type(), **values}
 
         return values
 
     @field_validator("obj_cls", mode="before")
     @classmethod
     def validate_obj_cls(cls, v: Any) -> Type:
+        obj_cls: Type | None
+
         match v:
             case type():
-                return v
+                obj_cls = v
 
             case str():
                 module_name: str
@@ -123,110 +165,29 @@ class ObjectConfig(Generic[T_GENERIC], BaseModel):
                         f"Referenced module name '{module_name}' not found!"
                     )
 
-                generic_type: Type = cls.get_generic_type()
-                if (generic_type is not T_GENERIC) and not issubclass(  # type: ignore
-                    obj_cls, generic_type
-                ):
-                    raise ValueError(
-                        f"Object class '{obj_cls}' is not a sub-class of '{generic_type}'!"
-                    )
-
-                return obj_cls
-
             case _:
                 raise ValueError(f"Invalid object class reference '{v}'!")
+
+        generic_type: Type = cls.get_generic_type()
+        if (generic_type is not T_GENERIC) and not issubclass(  # type: ignore
+            obj_cls, generic_type
+        ):
+            raise ValueError(
+                f"Object class '{obj_cls}' is not a sub-class of '{generic_type}'!"
+            )
+
+        return obj_cls
 
     @field_serializer("obj_cls")
     def serialize_obj_cls(self, obj_cls: Type, _info) -> str:
         return f"{obj_cls.__module__}.{obj_cls.__name__}"
-
-    @classmethod
-    def recursive_model_validate(
-        cls,
-        obj: Any,
-        after_validator: Callable[[Any], Any] | None = None,
-    ) -> Any:
-        match obj:
-            case BaseModel():
-                obj = obj.__class__.model_construct(
-                    **{
-                        key: cls.recursive_model_validate(
-                            getattr(obj, key), after_validator=after_validator
-                        )
-                        for key in obj.model_dump().keys()  # every field including extras
-                    }
-                )
-
-            case dict():
-                obj = {
-                    key: cls.recursive_model_validate(
-                        value, after_validator=after_validator
-                    )
-                    for key, value in obj.items()
-                }
-
-                # this has to be done after the validation of each field
-                try:
-                    obj = cls.model_validate(obj)
-
-                except ValidationError:
-                    ...
-
-            case list() | tuple() | set():
-                obj = type(obj)(
-                    cls.recursive_model_validate(value, after_validator=after_validator)
-                    for value in obj
-                )
-
-        if after_validator is not None:
-            obj = after_validator(obj)
-
-        return obj
-
-    @classmethod
-    def instantiate_obj(cls, config: Any) -> T_GENERIC:
-        if not isinstance(config, cls):
-            return config
-
-        config_dict: dict = {
-            key: getattr(config, key)
-            for key in itertools.chain(
-                config.model_fields,
-                config.model_extra.keys() if config.model_extra else [],
-            )
-            if key not in {"obj_cls"}
-        }
-        logging.debug(
-            f"Creating object of class '{config.obj_cls.__name__}' using config dict {config_dict}."
-        )
-
-        assert is_indirect_generic_subclass(config.__class__)
-
-        obj_instance: T_GENERIC
-        if hasattr(config.obj_cls, "create"):
-            # TODO: this is a hack to avoid `mypy` error
-            obj_instance = config.obj_cls.create(**config_dict)  # type: ignore
-        else:
-            obj_instance = config.obj_cls(**config_dict)
-
-        if config.__class__ is not ObjectConfig:
-            type_T: Type[T_GENERIC] = config.__class__.get_generic_type()  # type: ignore
-
-            if not isinstance(obj_instance, type_T):
-                logging.fatal(
-                    f"Object {obj_instance} is not a sub-class of config-specificed class '{type_T}'!"
-                )
-
-        return obj_instance  # type: ignore
 
     def instantiate(self, **kwargs: Any) -> T_GENERIC:
         if kwargs is not None:
             for key, value in kwargs.items():
                 setattr(self, key, value)
 
-        return ObjectConfig.recursive_model_validate(
-            self, after_validator=ObjectConfig.instantiate_obj
-        )
+        return instantiate_obj(self)
 
 
 class BaseConfig(BaseModel):
@@ -235,11 +196,9 @@ class BaseConfig(BaseModel):
         logging.info(f"Loading config from path {path!s}")
 
         with open(path, "r") as f:
-            obj: dict[str, Any] = yaml.unsafe_load(f)
+            yaml_obj: dict[str, Any] = yaml.unsafe_load(f)
 
-        return ObjectConfig.recursive_model_validate(
-            TypeAdapter(cls).validate_python(obj)
-        )
+        return TypeAdapter(cls).validate_python(yaml_obj)
 
     def to_yaml(self) -> str:
         return yaml.dump(self.model_dump(by_alias=True))
