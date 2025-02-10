@@ -21,7 +21,6 @@ from pydantic.warnings import GenericBeforeBaseModelWarning
 warnings.filterwarnings("ignore", category=GenericBeforeBaseModelWarning)
 
 T_GENERIC = TypeVar("T_GENERIC")
-T_CONFIG = TypeVar("T_CONFIG", bound="BaseConfig")
 
 
 class GenericAlias(Protocol):
@@ -71,14 +70,14 @@ def import_module(module_name: str) -> ModuleType:
     raise ModuleNotFoundError(f"Module {module_name} not found!")
 
 
-def instantiate_obj(obj: Any) -> Any:
+def instantiate_obj(obj: Any, **kwargs: dict[str, Any]) -> Any:
     match obj:
         case ObjectConfig():
             obj_dict: dict[str, Any] = {
                 key: instantiate_obj(getattr(obj, key))
                 # model_fields + model_extra.keys()
                 for key in obj.model_dump().keys()
-            }
+            } | kwargs
             logging.debug(
                 f"Creating object of class '{obj.__class__.__name__}' using dict {obj_dict}."
             )
@@ -129,6 +128,15 @@ class ObjectConfig(Generic[T_GENERIC], BaseModel):
         assert is_indirect_generic_subclass(cls)
 
         return get_args(cls.__orig_bases__[0])[0]
+
+    @classmethod
+    def parse_yaml(cls: Type[T_GENERIC], path: str | Path) -> T_GENERIC:
+        logging.info(f"Loading config from path {path!s}")
+
+        with open(path, "r") as f:
+            yaml_obj: dict[str, Any] = yaml.unsafe_load(f)
+
+        return TypeAdapter(cls).validate_python(yaml_obj)
 
     @model_validator(mode="before")
     @classmethod
@@ -182,23 +190,8 @@ class ObjectConfig(Generic[T_GENERIC], BaseModel):
     def serialize_obj_cls(self, obj_cls: Type, _info) -> str:
         return f"{obj_cls.__module__}.{obj_cls.__name__}"
 
-    def instantiate(self, **kwargs: Any) -> T_GENERIC:
-        if kwargs is not None:
-            for key, value in kwargs.items():
-                setattr(self, key, value)
-
-        return instantiate_obj(self)
-
-
-class BaseConfig(BaseModel):
-    @classmethod
-    def parse_yaml(cls: Type[T_CONFIG], path: str | Path) -> T_CONFIG:
-        logging.info(f"Loading config from path {path!s}")
-
-        with open(path, "r") as f:
-            yaml_obj: dict[str, Any] = yaml.unsafe_load(f)
-
-        return TypeAdapter(cls).validate_python(yaml_obj)
+    def instantiate(self, **kwargs) -> T_GENERIC:
+        return instantiate_obj(self, **kwargs)
 
     def to_yaml(self) -> str:
         return yaml.dump(self.model_dump(by_alias=True))
