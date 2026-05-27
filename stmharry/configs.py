@@ -2,7 +2,17 @@ import importlib
 import warnings
 from pathlib import Path
 from types import ModuleType
-from typing import Annotated, Any, Generic, Protocol, Type, TypeGuard, TypeVar, get_args
+from typing import (
+    Annotated,
+    Any,
+    Generic,
+    Protocol,
+    Self,
+    Type,
+    TypeGuard,
+    TypeVar,
+    get_args,
+)
 
 import yaml
 from absl import logging
@@ -130,7 +140,7 @@ class ObjectConfig(Generic[T_GENERIC], BaseModel):
         return get_args(cls.__orig_bases__[0])[0]
 
     @classmethod
-    def parse_yaml(cls: Type[T_GENERIC], path: str | Path) -> T_GENERIC:
+    def parse_yaml(cls, path: str | Path) -> Self:
         logging.info(f"Loading config from path {path!s}")
 
         with open(path, "r") as f:
